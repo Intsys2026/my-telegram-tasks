@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Задачи</title>
+    <!-- Подключаем скрипт Telegram -->
+    <script src="https://telegram.org"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #fff; padding: 20px; text-align: center; }
+        .btn { padding: 15px 30px; font-size: 18px; background: #2ecc71; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>Управление задачами</h2>
+    <button class="btn" onclick="finishTask()">✅ ЗАВЕРШИТЬ ЗАДАЧУ</button>
+
+    <script>
+        // Инициализируем Web App
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+
+        function finishTask() {
+            // Ваш код отправки данных обратно в бота
+            tg.sendData(JSON.stringify({
+                action: "complete_task",
+                project_id: "1",      // ID листа
+                row_number: 4         // Номер строки в таблице
+            }));
+            
+            // Закрываем окно Web App после отправки
+            tg.close();
+        }
+    </script>
+</body>
+</html>
