@@ -84,7 +84,7 @@
 
         async function loadTasks() {
             // Использование экспортного CORS-безопасного URL в формате CSV
-            const url = `https://docs.google.com{SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
             
             try {
                 const response = await fetch(url);
