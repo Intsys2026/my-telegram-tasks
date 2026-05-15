@@ -72,61 +72,53 @@
         }
 
         // --- НАСТРОЙКИ: СЮДА ВСТАВЛЯЙТЕ ВАШИ ДАННЫЕ ---
-        // Сюда вставьте ДЛИННЫЙ ID из ссылки (между /d/ и /edit)
         const SPREADSHEET_ID = "1NMDjfKVhiByD_gXR-ddhTWCBBXiBfXSOoU03J-EHcAQ";
-        // Сюда вставьте цифры из параметра gid= в конце ссылки
         const SHEET_GID = "1827501691"; 
 
-        // Индексы столбцов TaskTable
-        const COL_TASK_ID = 0;      // Столбец 1
-        const COL_NAME = 1;         // Столбец 2
-        const COL_DESC = 2;         // Столбец 3
-        const COL_STATUS = 4;       // Столбец 5
-        const COL_RESPONSIBLE = 7;  // Столбец 8
+        // Индексы столбцов в CSV формате (0 — Столбец A, 1 — Столбец B и т.д.)
+        const COL_TASK_ID = 0;      // Столбец 1 (A)
+        const COL_NAME = 1;         // Столбец 2 (B)
+        const COL_DESC = 3;         // Столбец 3 (C)
+        const COL_STATUS = 4;       // Столбец 5 (E)
+        const COL_RESPONSIBLE = 7;  // Столбец 8 (H)
 
         async function loadTasks() {
-            // Исправленный, рабочий URL для прямого запроса к конкретному GID
-            const url = `https://google.com{SPREADSHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
+            // Использование экспортного CORS-безопасного URL в формате CSV
+            const url = `https://google.com{SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
             
             try {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
                 
-                const text = await response.text();
+                const csvText = await response.text();
                 
-                const startIdx = text.indexOf("{");
-                const endIdx = text.lastIndexOf("}");
-                if (startIdx === -1 || endIdx === -1) {
-                    throw new Error("Некорректный формат ответа Google.");
-                }
-                
-                const jsonString = text.substring(startIdx, endIdx + 1);
-                const data = JSON.parse(jsonString);
-                
-                const rows = data.table.rows;
+                // Простейший парсер CSV по строкам
+                const lines = csvText.split("\n");
                 const container = document.getElementById('tasks-container');
                 document.getElementById('loader').style.display = 'none';
                 
                 let hasActiveTasks = false;
 
-                rows.forEach((row, index) => {
-                    if (index < 3) return; // Пропускаем первые 3 строки шапки
+                lines.forEach((line, index) => {
+                    if (index < 3) return; // Пропускаем первые 3 строки шапки таблицы
                     
-                    const cells = row.c;
-                    if (!cells || !cells[COL_STATUS] || cells[COL_STATUS].v === null) return;
+                    // Разбиваем строку по запятым, учитывая возможные кавычки
+                    const cells = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.replace(/^"|"$/g, '').trim());
+                    
+                    if (cells.length <= COL_STATUS) return;
 
-                    const status = cells[COL_STATUS].v;
+                    const status = cells[COL_STATUS];
 
-                    // Фильтр по статусу 1 (В работе)
+                    // Фильтр по числовому статусу 1 (В работе)
                     if (parseInt(status) === 1) {
                         hasActiveTasks = true;
                         
-                        const taskId = (cells[COL_TASK_ID] && cells[COL_TASK_ID].v !== null) ? cells[COL_TASK_ID].v : '—';
-                        const taskName = (cells[COL_NAME] && cells[COL_NAME].v !== null) ? cells[COL_NAME].v : 'Без названия';
-                        const description = (cells[COL_DESC] && cells[COL_DESC].v !== null) ? cells[COL_DESC].v : '—';
-                        const assignee = (cells[COL_RESPONSIBLE] && cells[COL_RESPONSIBLE].v !== null) ? cells[COL_RESPONSIBLE].v : 'Не назначен';
+                        const taskId = cells[COL_TASK_ID] || '—';
+                        const taskName = cells[COL_NAME] || 'Без названия';
+                        const description = cells[COL_DESC] || '—';
+                        const assignee = cells[COL_RESPONSIBLE] || 'Не назначен';
                         
-                        const googleRowNumber = index + 1; 
+                        const googleRowNumber = index + 1; // Точный номер строки для gspread в Python
 
                         const card = document.createElement('div');
                         card.className = 'card';
@@ -146,7 +138,7 @@
                 }
 
             } catch (error) {
-                document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка: ${error.message}</span>`;
+                document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка загрузки: ${error.message}</span>`;
             }
         }
 
