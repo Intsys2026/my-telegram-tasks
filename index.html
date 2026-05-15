@@ -4,11 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Активные задачи</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://telegram.org"></script>
     <style>
-        /* Используем официальные цвета темы Telegram пользователя */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             background: var(--tg-theme-bg-color, #efeff4);
             color: var(--tg-theme-text-color, #000000);
             margin: 0;
@@ -36,7 +35,6 @@
         .info-row {
             font-size: 14px;
             margin: 6px 0;
-            color: var(--tg-theme-text-color, #000000);
         }
         .info-label {
             color: var(--tg-theme-hint-color, #8e8e93);
@@ -52,10 +50,6 @@
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
-        }
-        .btn-complete:active {
-            background: #2cb04e;
         }
         .loader {
             text-align: center;
@@ -71,32 +65,42 @@
     <div id="tasks-container"></div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
+        const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
 
-        // --- НАСТРОЙКИ: ПОДСТАВЬТЕ СВОИ ДАННЫЕ ---
-        const SPREADSHEET_ID = "1827501691";
-        const SHEET_GID = "1827501691"; // Имя листа (числовой ID проекта, который мы открываем)
+        // --- НАСТРОЙКИ: СЮДА ВСТАВЛЯЙТЕ ВАШИ ДАННЫЕ ---
+        // Сюда вставьте ДЛИННЫЙ ID из ссылки (между /d/ и /edit)
+        const SPREADSHEET_ID = "1NMDjfKVhiByD_gXR-ddhTWCBBXiBfXSOoU03J-EHcAQ";
+        // Сюда вставьте цифры из параметра gid= в конце ссылки
+        const SHEET_GID = "1827501691"; 
 
-        // Соответствие столбцов вашей структуре TaskTable (минус 1, так как в JS массивы с 0)
-        const COL_TASK_ID = 0;
-        const COL_NAME = 1;
-        const COL_DESC = 2;
-        const COL_TYPE = 3;
-        const COL_STATUS = 4;
-        const COL_RESPONSIBLE = 7; // Столбец 8 (внутренняя инфо / ответственный)
+        // Индексы столбцов TaskTable
+        const COL_TASK_ID = 0;      // Столбец 1
+        const COL_NAME = 1;         // Столбец 2
+        const COL_DESC = 2;         // Столбец 3
+        const COL_STATUS = 4;       // Столбец 5
+        const COL_RESPONSIBLE = 7;  // Столбец 8
 
-        // Функция для загрузки данных из Google Таблицы без API-ключей (через экспорт в CSV/визуализатор)
         async function loadTasks() {
-            const url = `https://google.com{SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${SHEET_NAME}`;
+            // Исправленный, рабочий URL для прямого запроса к конкретному GID
+            const url = `https://google.com{SPREADSHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
             
             try {
                 const response = await fetch(url);
+                if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
+                
                 const text = await response.text();
                 
-                // Google возвращает данные завернутыми в функцию, очищаем их для получения чистого JSON
-                const jsonString = text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
+                const startIdx = text.indexOf("{");
+                const endIdx = text.lastIndexOf("}");
+                if (startIdx === -1 || endIdx === -1) {
+                    throw new Error("Некорректный формат ответа Google.");
+                }
+                
+                const jsonString = text.substring(startIdx, endIdx + 1);
                 const data = JSON.parse(jsonString);
                 
                 const rows = data.table.rows;
@@ -105,29 +109,25 @@
                 
                 let hasActiveTasks = false;
 
-                // Пропускаем шапку таблицы (первые строки метаданных)
-                // Начинаем разбор строк с реальными задачами
                 rows.forEach((row, index) => {
                     if (index < 3) return; // Пропускаем первые 3 строки шапки
                     
                     const cells = row.c;
-                    if (!cells || !cells[COL_STATUS]) return;
+                    if (!cells || !cells[COL_STATUS] || cells[COL_STATUS].v === null) return;
 
                     const status = cells[COL_STATUS].v;
 
-                    // Фильтруем: выводим только статус 1 (В работе)
-                    if (Number(status) === 1) {
+                    // Фильтр по статусу 1 (В работе)
+                    if (parseInt(status) === 1) {
                         hasActiveTasks = true;
                         
-                        const taskId = cells[COL_TASK_ID] ? cells[COL_TASK_ID].v : '—';
-                        const taskName = cells[COL_NAME] ? cells[COL_NAME].v : 'Без названия';
-                        const description = cells[COL_DESC] ? cells[COL_DESC].v : '';
-                        const assignee = cells[COL_RESPONSIBLE] ? cells[COL_RESPONSIBLE].v : 'Не назначен';
+                        const taskId = (cells[COL_TASK_ID] && cells[COL_TASK_ID].v !== null) ? cells[COL_TASK_ID].v : '—';
+                        const taskName = (cells[COL_NAME] && cells[COL_NAME].v !== null) ? cells[COL_NAME].v : 'Без названия';
+                        const description = (cells[COL_DESC] && cells[COL_DESC].v !== null) ? cells[COL_DESC].v : '—';
+                        const assignee = (cells[COL_RESPONSIBLE] && cells[COL_RESPONSIBLE].v !== null) ? cells[COL_RESPONSIBLE].v : 'Не назначен';
                         
-                        // Номер строки в Google Таблице для обратной связи с ботом
                         const googleRowNumber = index + 1; 
 
-                        // Генерируем HTML-карточку
                         const card = document.createElement('div');
                         card.className = 'card';
                         card.innerHTML = `
@@ -135,23 +135,26 @@
                             <div class="info-row"><span class="info-label">ID задачи:</span> ${taskId}</div>
                             <div class="info-row"><span class="info-label">Описание:</span> ${description}</div>
                             <div class="info-row"><span class="info-label">Ответственный:</span> ${assignee}</div>
-                            <button class="btn-complete" onclick="confirmTask('${googleRowNumber}', '${taskName}')">✅ ЗАВЕРШИТЬ</button>
-                        </code-block>`;
+                            <button class="btn-complete" onclick="confirmTask('${googleRowNumber}', '${taskName.replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
+                        `;
                         container.appendChild(card);
                     }
                 });
 
                 if (!hasActiveTasks) {
-                    container.innerHTML = '<div class="loader">Нет активных задач в работе на этом объекте.</div>';
+                    container.innerHTML = '<div class="loader">Нет активных задач со статусом "В работе" (1).</div>';
                 }
 
             } catch (error) {
-                document.getElementById('loader').innerText = 'Ошибка загрузки данных: ' + error;
+                document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка: ${error.message}</span>`;
             }
         }
 
-        // Всплывающее окно подтверждения Telegram
         function confirmTask(rowNumber, taskName) {
+            if (!tg) {
+                alert("Действие доступно только внутри Telegram");
+                return;
+            }
             tg.showPopup({
                 title: 'Завершение задачи',
                 message: `Вы действительно хотите завершить задачу:\n"${taskName}"?`,
@@ -161,10 +164,9 @@
                 ]
             }, function(buttonId) {
                 if (buttonId === 'yes') {
-                    // Отправляем боту точные координаты ячейки
                     tg.sendData(JSON.stringify({
                         action: "complete_task",
-                        project_id: SHEET_NAME,      
+                        project_id: SHEET_GID, 
                         row_number: Number(rowNumber)
                     }));
                     tg.close();
@@ -172,7 +174,6 @@
             });
         }
 
-        // Запуск парсинга при открытии страницы
         loadTasks();
     </script>
 </body>
