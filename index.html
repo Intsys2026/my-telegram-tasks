@@ -170,3 +170,189 @@
     </script>
 </body>
 </html>
+
+---------------------------------------------------------------------------------
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Активные задачи</title>
+    <script src="https://telegram.org"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background: var(--tg-theme-bg-color, #efeff4);
+            color: var(--tg-theme-text-color, #000000);
+            margin: 0;
+            padding: 12px;
+        }
+        .header {
+            font-size: 14px;
+            text-transform: uppercase;
+            color: var(--tg-theme-hint-color, #8e8e93);
+            margin: 10px 5px;
+            font-weight: 600;
+        }
+        .card {
+            background: var(--tg-theme-secondary-bg-color, #ffffff);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .object-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #3498db;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .task-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0 0 10px 0;
+        }
+        .info-row {
+            font-size: 14px;
+            margin: 6px 0;
+        }
+        .info-label {
+            color: var(--tg-theme-hint-color, #8e8e93);
+        }
+        .btn-complete {
+            width: 100%;
+            padding: 12px;
+            margin-top: 12px;
+            background: #34c759;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .loader {
+            text-align: center;
+            padding: 40px;
+            color: var(--tg-theme-hint-color, #8e8e93);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">Текущие задачи в работе</div>
+    <div id="loader" class="loader">Загрузка данных из таблицы...</div>
+    <div id="tasks-container"></div>
+
+    <script>
+        const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
+
+        // --- НАСТРОЙКИ ---
+        const SPREADSHEET_ID = "1NMDjfKVhiByD_gXR-ddhTWCBBXiBfXSOoU03J-EHcAQ";
+        const SHEET_GID = "1827501691"; 
+
+        // Индексы столбцов в CSV формате (0 — Столбец A, 1 — Столбец B и т.д.)
+        const COL_TASK_ID = 0;      // Столбец 1 (A)
+        const COL_NAME = 1;         // Столбец 2 (B)
+        const COL_DESC = 2;         // Столбец 3 (C)
+        const COL_STATUS = 4;       // Столбец 5 (E)
+        const COL_RESPONSIBLE = 7;  // Столбец 8 (H)
+
+        async function loadTasks() {
+            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
+                
+                const csvText = await response.text();
+                const lines = csvText.split("\n");
+                const container = document.getElementById('tasks-container');
+                document.getElementById('loader').style.display = 'none';
+                
+                // Шаг 1: Извлекаем текстовое название объекта из первой строки (Строка 1, Столбец B)
+                let projectName = "Неизвестный объект";
+                if (lines.length > 0) {
+                    const firstRowCells = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim());
+                    if (firstRowCells.length > 1 && firstRowCells[1]) {
+                        projectName = firstRowCells[1]; // Забираем текст названия проекта
+                    }
+                }
+
+                let hasActiveTasks = false;
+
+                lines.forEach((line, index) => {
+                    if (index < 3) return; // Пропускаем метаданные и шапку таблицы
+                    
+                    const cells = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.replace(/^"|"$/g, '').trim());
+                    if (cells.length <= COL_STATUS) return;
+
+                    const status = cells[COL_STATUS];
+
+                    // Фильтр по статусу 1 (В работе)
+                    if (parseInt(status) === 1) {
+                        hasActiveTasks = true;
+                        
+                        const taskName = cells[COL_NAME] || 'Без названия';
+                        const description = cells[COL_DESC] || '—';
+                        const assignee = cells[COL_RESPONSIBLE] || 'Не назначен';
+                        
+                        const googleRowNumber = index + 1; 
+
+                        // Генерируем новую карточку по вашим требованиям
+                        const card = document.createElement('div');
+                        card.className = 'card';
+                        card.innerHTML = `
+                            <div class="object-title">🏢 Объект: ${projectName}</div>
+                            <div class="task-title">${taskName}</div>
+                            <div class="info-row"><span class="info-label">Описание:</span> ${description}</div>
+                            <div class="info-row"><span class="info-label">Ответственный:</span> ${assignee}</div>
+                            <button class="btn-complete" onclick="confirmTask('${googleRowNumber}', '${taskName.replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
+                        `;
+                        container.appendChild(card);
+                    }
+                });
+
+                if (!hasActiveTasks) {
+                    container.innerHTML = `<div class="loader">На объекте "${projectName}" нет активных задач.</div>`;
+                }
+
+            } catch (error) {
+                document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка загрузки: ${error.message}</span>`;
+            }
+        }
+
+        function confirmTask(rowNumber, taskName) {
+            if (!tg) {
+                alert("Действие доступно только внутри Telegram");
+                return;
+            }
+            tg.showPopup({
+                title: 'Завершение задачи',
+                message: `Вы действительно хотите завершить задачу:\n"${taskName}"?`,
+                buttons: [
+                    {id: 'yes', type: 'ok', text: 'Да, готово'},
+                    {id: 'no', type: 'cancel', text: 'Отмена'}
+                ]
+            }, function(buttonId) {
+                if (buttonId === 'yes') {
+                    tg.sendData(JSON.stringify({
+                        action: "complete_task",
+                        project_id: SHEET_GID, 
+                        row_number: Number(rowNumber)
+                    }));
+                    tg.close();
+                }
+            });
+        }
+
+        loadTasks();
+    </script>
+</body>
+</html>
