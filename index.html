@@ -27,17 +27,10 @@
             margin-bottom: 12px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        .object-title {
-            font-size: 13px;
-            font-weight: bold;
-            color: #3498db;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
         .task-title {
             font-size: 18px;
             font-weight: bold;
-            margin: 0 0 10px 0;
+            margin: 12px 0 10px 0;
         }
         .info-row {
             font-size: 14px;
@@ -46,17 +39,37 @@
         .info-label {
             color: var(--tg-theme-hint-color, #8e8e93);
         }
-        .btn-complete {
+        /* Общие базовые стили для обеих кнопок */
+        .btn-base {
             width: 100%;
-            padding: 12px;
-            margin-top: 12px;
-            background: #34c759;
-            color: white;
+            padding: 12px; /* Одинаковая высота */
             border: none;
             border-radius: 8px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; /* Одинаковый шрифт */
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
+            box-sizing: border-box;
+            transition: background 0.2s;
+        }
+        /* Кнопка объекта — СЕРАЯ */
+        .btn-project {
+            background: #e5e5ea; /* Серый цвет под тему iOS/Telegram */
+            color: #000000;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+        .btn-project:active {
+            background: #d1d1d6;
+        }
+        /* Кнопка завершения — ЗЕЛЕНАЯ */
+        .btn-complete {
+            background: #34c759;
+            color: white;
+            margin-top: 12px;
+        }
+        .btn-complete:active {
+            background: #2cb04e;
         }
         .loader {
             text-align: center;
@@ -82,13 +95,13 @@
         const SPREADSHEET_ID = "1NMDjfKVhiByD_gXR-ddhTWCBBXiBfXSOoU03J-EHcAQ";
         const SHEET_GID = "1827501691"; 
 
-        // Индексы столбцов в CSV формате (0 — Столбец A, 1 — Столбец B и т.д.)
-const COL_TASK_ID = 0;      // Столбец 1 (A) - ID Задачи
-        const COL_NAME = 1;         // Столбец 2 (B) - Название задачи
-        const COL_DESC = 2;         // Столбец 3 (C) - Описание задачи
-        const COL_RESPONSIBLE = 3;  // Столбец 4 (D) - Ответственное лицо (НОВОЕ МЕСТО)
-        const COL_TYPE = 4;         // Столбец 5 (E) - Тип задачи
-        const COL_STATUS = 5;       // Столбец 6 (F) - Статус задачи (ПЕРЕЕХАЛ НА 6 МЕСТО)
+        // Индексы столбцов по вашей новой структуре TaskTable
+        const COL_TASK_ID = 0;      
+        const COL_NAME = 1;         
+        const COL_DESC = 2;         
+        const COL_RESPONSIBLE = 3;  
+        const COL_TYPE = 4;         
+        const COL_STATUS = 5;       
 
         async function loadTasks() {
             const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
@@ -102,12 +115,12 @@ const COL_TASK_ID = 0;      // Столбец 1 (A) - ID Задачи
                 const container = document.getElementById('tasks-container');
                 document.getElementById('loader').style.display = 'none';
                 
-                // Шаг 1: Извлекаем текстовое название объекта из первой строки (Строка 1, Столбец B)
+                // Извлекаем текстовое название объекта из первой строки (Строка 1, Столбец B)
                 let projectName = "Неизвестный объект";
                 if (lines.length > 0) {
                     const firstRowCells = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim());
                     if (firstRowCells.length > 1 && firstRowCells[1]) {
-                        projectName = firstRowCells[1]; // Забираем текст названия проекта
+                        projectName = firstRowCells[1]; 
                     }
                 }
 
@@ -131,27 +144,38 @@ const COL_TASK_ID = 0;      // Столбец 1 (A) - ID Задачи
                         
                         const googleRowNumber = index + 1; 
 
-                        // Генерируем новую карточку по вашим требованиям
+                        // Генерируем карточку по новым правилам
                         const card = document.createElement('div');
                         card.className = 'card';
                         card.innerHTML = `
-                            <div class="object-title">🏢 Объект: ${projectName}</div>
+                            <button class="btn-base btn-project" onclick="clickProject('${projectName}')">${projectName}</button>
                             <div class="task-title">${taskName}</div>
                             <div class="info-row"><span class="info-label">Описание:</span> ${description}</div>
                             <div class="info-row"><span class="info-label">Ответственный:</span> ${assignee}</div>
-                            <button class="btn-complete" onclick="confirmTask('${googleRowNumber}', '${taskName.replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
+                            <button class="btn-base btn-complete" onclick="confirmTask('${googleRowNumber}', '${taskName.replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
                         `;
                         container.appendChild(card);
                     }
                 });
 
                 if (!hasActiveTasks) {
-                    container.innerHTML = `<div class="loader">На объекте "${projectName}" нет активных задач.</div>`;
+                    container.innerHTML = '<div class="loader">На объекте "' + projectName + '" нет активных задач.</div>';
                 }
 
             } catch (error) {
                 document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка загрузки: ${error.message}</span>`;
             }
+        }
+
+        // Заготовка для кнопки объекта (отработает позже в Python-коде)
+        function clickProject(name) {
+            if (!tg) return;
+            tg.sendData(JSON.stringify({
+                action: "view_project_tasks",
+                project_name: name,
+                project_id: SHEET_GID
+            }));
+            tg.close();
         }
 
         function confirmTask(rowNumber, taskName) {
