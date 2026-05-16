@@ -83,11 +83,12 @@
         const SHEET_GID = "1827501691"; 
 
         // Индексы столбцов в CSV формате (0 — Столбец A, 1 — Столбец B и т.д.)
-        const COL_TASK_ID = 0;      // Столбец 1 (A)
-        const COL_NAME = 1;         // Столбец 2 (B)
-        const COL_DESC = 2;         // Столбец 3 (C)
-        const COL_STATUS = 4;       // Столбец 5 (E)
-        const COL_RESPONSIBLE = 7;  // Столбец 8 (H)
+const COL_TASK_ID = 0;      // Столбец 1 (A) - ID Задачи
+        const COL_NAME = 1;         // Столбец 2 (B) - Название задачи
+        const COL_DESC = 2;         // Столбец 3 (C) - Описание задачи
+        const COL_RESPONSIBLE = 3;  // Столбец 4 (D) - Ответственное лицо (НОВОЕ МЕСТО)
+        const COL_TYPE = 4;         // Столбец 5 (E) - Тип задачи
+        const COL_STATUS = 5;       // Столбец 6 (F) - Статус задачи (ПЕРЕЕХАЛ НА 6 МЕСТО)
 
         async function loadTasks() {
             const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
