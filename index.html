@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Активные задачи</title>
+    <title>Все активные задачи</title>
     <script src="https://telegram.org"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            background: var(--tg-theme-bg-color, #ffffff); /* Общий фон страницы делаем светлым */
+            background: var(--tg-theme-bg-color, #ffffff); 
             color: var(--tg-theme-text-color, #000000);
             margin: 0;
             padding: 12px;
@@ -20,14 +20,14 @@
             margin: 10px 5px;
             font-weight: 600;
         }
-        /* 1. ФОН ЗАДАЧИ — СЕРЫЙ ДЛЯ ВЫДЕЛЕНИЯ КАРТОЧКИ */
         .card {
-            background: #f2f2f7; /* Мягкий серый фон карточки */
-            border: 2px solid #000000; /* ЧЕТКИЙ ЧЕРНЫЙ КОНТУР ВОКРУГ ЗАДАЧИ */
+            background: #f2f2f7;       
+            border: 2px solid #000000;  
             border-radius: 12px;
             padding: 16px;
             margin-bottom: 16px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            box-sizing: border-box;
         }
         .task-title {
             font-size: 18px;
@@ -41,7 +41,6 @@
         .info-label {
             color: #8e8e93;
         }
-        /* Базовые стили для кнопок */
         .btn-base {
             width: 100%;
             padding: 12px; 
@@ -54,17 +53,15 @@
             box-sizing: border-box;
             transition: background 0.2s;
         }
-        /* 2. КНОПКА ОБЪЕКТА — ТЕМНЕЕ ФОНА И С ТЕМНО-СИНИМ ШРИФТОМ */
         .btn-project {
-            background: #e5e5ea; /* Контрастный серый цвет кнопки */
-            color: #0047ab;      /* Темно-синий шрифт текста */
+            background: #e5e5ea; 
+            color: #0047ab;      
             margin-bottom: 4px;
             text-align: center;
         }
         .btn-project:active {
             background: #d1d1d6;
         }
-        /* Кнопка завершения — ЗЕЛЕНАЯ */
         .btn-complete {
             background: #34c759;
             color: white;
@@ -82,8 +79,8 @@
 </head>
 <body>
 
-    <div class="header">Текущие задачи в работе</div>
-    <div id="loader" class="loader">Загрузка данных из таблицы...</div>
+    <div class="header">Все задачи в работе по всем объектам</div>
+    <div id="loader" class="loader">Загрузка списка задач...</div>
     <div id="tasks-container"></div>
 
     <script>
@@ -93,97 +90,54 @@
             tg.expand();
         }
 
-        // --- НАСТРОЙКИ ---
-        const SPREADSHEET_ID = "1NMDjfKVhiByD_gXR-ddhTWCBBXiBfXSOoU03J-EHcAQ";
-        const SHEET_GID = "1827501691"; 
-
-        // Индексы столбцов по структуре TaskTable
-        const COL_TASK_ID = 0;      
-        const COL_NAME = 1;         
-        const COL_DESC = 2;         
-        const COL_RESPONSIBLE = 3;  
-        const COL_TYPE = 4;         
-        const COL_STATUS = 5;       
-
         async function loadTasks() {
-            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+            // Читаем локальный JSON файл, созданный ботом (добавляем случайный параметр, чтобы избежать кэширования браузером)
+            const url = `tasks.json?nocache=${Date.now()}`;
             
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
+                if (!response.ok) throw new Error("Файл задач еще не сгенерирован ботом.");
                 
-                const csvText = await response.text();
-                const lines = csvText.split("\n");
+                const tasks = await response.json();
                 const container = document.getElementById('tasks-container');
                 document.getElementById('loader').style.display = 'none';
                 
-                // Извлекаем текстовое название объекта из первой строки (Строка 1, Столбец B)
-                let projectName = "Неизвестный объект";
-                if (lines.length > 0) {
-                    const firstRowCells = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim());
-                    if (firstRowCells.length > 1 && firstRowCells[1]) {
-                        projectName = firstRowCells[1]; 
-                    }
+                if (tasks.length === 0) {
+                    container.innerHTML = '<div class="loader">Нет активных задач ни на одном объекте! 🎉</div>';
+                    return;
                 }
 
-                let hasActiveTasks = false;
-
-                lines.forEach((line, index) => {
-                    if (index < 3) return; // Пропускаем метаданные и шапку таблицы
-                    
-                    const cells = line.split(/,(?=(?:(?:[^"]*"){2})*[^随]*$)/).map(cell => cell.replace(/^"|"$/g, '').trim());
-                    if (cells.length <= COL_STATUS) return;
-
-                    const status = cells[COL_STATUS];
-
-                    // Фильтр по статусу 1 (В работе)
-                    if (parseInt(status) === 1) {
-                        hasActiveTasks = true;
-                        
-                        const taskName = cells[COL_NAME] || 'Без названия';
-                        const description = cells[COL_DESC] || '—';
-                        const assignee = cells[COL_RESPONSIBLE] || 'Не назначен';
-                        
-                        const googleRowNumber = index + 1; 
-
-                        // Генерируем карточку по новым стилям
-                        const card = document.createElement('div');
-                        card.className = 'card';
-                        card.innerHTML = `
-                            <button class="btn-base btn-project" onclick="clickProject('${projectName}')">${projectName}</button>
-                            <div class="task-title">${taskName}</div>
-                            <div class="info-row"><span class="info-label">Описание:</span> ${description}</div>
-                            <div class="info-row"><span class="info-label">Ответственный:</span> ${assignee}</div>
-                            <button class="btn-base btn-complete" onclick="confirmTask('${googleRowNumber}', '${taskName.replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
-                        `;
-                        container.appendChild(card);
-                    }
+                // Выводим каждую задачу из общего списка
+                tasks.forEach((task) => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <button class="btn-base btn-project" onclick="clickProject('${task.project_name}', '${task.project_id}')">${task.project_name}</button>
+                        <div class="task-title">${task.task_name}</div>
+                        <div class="info-row"><span class="info-label">Описание:</span> ${task.description}</div>
+                        <div class="info-row"><span class="info-label">Ответственный:</span> ${task.assignee}</div>
+                        <button class="btn-base btn-complete" onclick="confirmTask('${task.project_id}', '${task.row_number}', '${task.task_name.replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
+                    `;
+                    container.appendChild(card);
                 });
 
-                if (!hasActiveTasks) {
-                    container.innerHTML = '<div class="loader">На объекте "' + projectName + '" нет активных задач.</div>';
-                }
-
             } catch (error) {
-                document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка загрузки: ${error.message}</span>`;
+                document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка: ${error.message}</span>`;
             }
         }
 
-        function clickProject(name) {
+        function clickProject(name, gid) {
             if (!tg) return;
             tg.sendData(JSON.stringify({
                 action: "view_project_tasks",
                 project_name: name,
-                project_id: SHEET_GID
+                project_id: gid
             }));
             tg.close();
         }
 
-        function confirmTask(rowNumber, taskName) {
-            if (!tg) {
-                alert("Действие доступно только внутри Telegram");
-                return;
-            }
+        function confirmTask(projectGid, rowNumber, taskName) {
+            if (!tg) return;
             tg.showPopup({
                 title: 'Завершение задачи',
                 message: `Вы действительно хотите завершить задачу:\n"${taskName}"?`,
@@ -193,9 +147,10 @@
                 ]
             }, function(buttonId) {
                 if (buttonId === 'yes') {
+                    // Передаем точный GID листа и номер строки для Python-обработчика
                     tg.sendData(JSON.stringify({
                         action: "complete_task",
-                        project_id: SHEET_GID, 
+                        project_id: projectGid, 
                         row_number: Number(rowNumber)
                     }));
                     tg.close();
