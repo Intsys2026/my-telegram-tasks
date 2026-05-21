@@ -2,9 +2,9 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Все активные задачи</title>
-    <script src="https://telegram.org"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -75,9 +75,30 @@
             padding: 40px;
             color: #8e8e93;
         }
+        /* Индикатор обновления */
+        .refresh-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #34c759;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 14px;
+            transform: translateY(-100%);
+            transition: transform 0.3s;
+            z-index: 1000;
+        }
+        .refresh-indicator.show {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
+
+    <!-- Индикатор обновления -->
+    <div id="refreshIndicator" class="refresh-indicator">🔄 Обновление...</div>
 
     <div class="header">Все задачи в работе по всем объектам</div>
     <div id="loader" class="loader">Загрузка списка задач...</div>
@@ -90,8 +111,141 @@
             tg.expand();
         }
 
+        // ============================================
+        // ПОЛНОЕ АВТООБНОВЛЕНИЕ
+        // ============================================
+
+        let autoRefreshTimer = null;
+        let isRefreshing = false;
+
+        // Показываем индикатор обновления
+        function showRefreshIndicator() {
+            const indicator = document.getElementById('refreshIndicator');
+            indicator.classList.add('show');
+            setTimeout(() => {
+                indicator.classList.remove('show');
+            }, 1000);
+        }
+
+        // Обновление задач (перезагрузка данных без перезагрузки страницы)
+        async function refreshTasks() {
+            if (isRefreshing) return;
+            isRefreshing = true;
+            showRefreshIndicator();
+            
+            const url = `tasks.json?nocache=${Date.now()}`;
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Файл задач еще не сгенерирован");
+                
+                const tasks = await response.json();
+                const container = document.getElementById('tasks-container');
+                const loader = document.getElementById('loader');
+                
+                loader.style.display = 'none';
+                
+                if (tasks.length === 0) {
+                    container.innerHTML = '<div class="loader">Нет активных задач ни на одном объекте! 🎉</div>';
+                    return;
+                }
+
+                // Очищаем и перерисовываем
+                container.innerHTML = '';
+                tasks.forEach((task) => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <button class="btn-base btn-project" onclick="clickProject('${escapeHtml(task.project_name)}', '${task.project_id}')">${escapeHtml(task.project_name)}</button>
+                        <div class="task-title">${escapeHtml(task.task_name)}</div>
+                        <div class="info-row"><span class="info-label">Описание:</span> ${escapeHtml(task.description)}</div>
+                        <div class="info-row"><span class="info-label">Ответственный:</span> ${escapeHtml(task.assignee)}</div>
+                        <button class="btn-base btn-complete" onclick="confirmTask('${task.project_id}', '${task.row_number}', '${escapeHtml(task.task_name).replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
+                    `;
+                    container.appendChild(card);
+                });
+                
+                console.log('✅ Задачи обновлены в', new Date().toLocaleTimeString());
+                
+            } catch (error) {
+                console.error('Ошибка обновления:', error);
+                document.getElementById('loader').innerHTML = `<span style="color: #e74c3c; font-weight: bold;">⚠️ Ошибка: ${error.message}</span>`;
+            } finally {
+                isRefreshing = false;
+            }
+        }
+
+        // Функция защиты от XSS
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // ============================================
+        // 1. АВТООБНОВЛЕНИЕ ПО ТАЙМЕРУ (каждые 15 секунд)
+        // ============================================
+        function startAutoRefresh() {
+            if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+            autoRefreshTimer = setInterval(() => {
+                refreshTasks();
+            }, 15000); // 15 секунд
+            console.log('✅ Автообновление включено (каждые 15 секунд)');
+        }
+
+        // ============================================
+        // 2. PULL-TO-REFRESH (свайп вниз)
+        // ============================================
+        let startY = 0;
+        let isPulling = false;
+
+        document.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+            isPulling = true;
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isPulling) return;
+            const moveY = e.touches[0].clientY - startY;
+            if (moveY > 60 && window.scrollY === 0) {
+                isPulling = false;
+                refreshTasks();
+            }
+        });
+
+        document.addEventListener('touchend', () => {
+            isPulling = false;
+        });
+
+        // ============================================
+        // 3. ОБНОВЛЕНИЕ ПРИ ВОЗВРАТЕ НА ВКЛАДКУ
+        // ============================================
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                refreshTasks();
+            }
+        });
+
+        // ============================================
+        // 4. ОБНОВЛЕНИЕ ПРИ ПРОВЕДЕНИИ ПАЛЬЦЕМ ВНИЗ (доп. вариант для десктопа)
+        // ============================================
+        let lastScrollTop = 0;
+        window.addEventListener('scroll', () => {
+            const st = window.scrollY;
+            if (st === 0 && lastScrollTop > 0 && lastScrollTop < 5) {
+                refreshTasks();
+            }
+            lastScrollTop = st;
+        });
+
+        // ============================================
+        // ЗАГРУЗКА ПРИ СТАРТЕ
+        // ============================================
         async function loadTasks() {
-            // Читаем локальный JSON файл, созданный ботом (добавляем случайный параметр, чтобы избежать кэширования браузером)
             const url = `tasks.json?nocache=${Date.now()}`;
             
             try {
@@ -100,23 +254,25 @@
                 
                 const tasks = await response.json();
                 const container = document.getElementById('tasks-container');
-                document.getElementById('loader').style.display = 'none';
+                const loader = document.getElementById('loader');
+                
+                loader.style.display = 'none';
                 
                 if (tasks.length === 0) {
                     container.innerHTML = '<div class="loader">Нет активных задач ни на одном объекте! 🎉</div>';
                     return;
                 }
 
-                // Выводим каждую задачу из общего списка
+                container.innerHTML = '';
                 tasks.forEach((task) => {
                     const card = document.createElement('div');
                     card.className = 'card';
                     card.innerHTML = `
-                        <button class="btn-base btn-project" onclick="clickProject('${task.project_name}', '${task.project_id}')">${task.project_name}</button>
-                        <div class="task-title">${task.task_name}</div>
-                        <div class="info-row"><span class="info-label">Описание:</span> ${task.description}</div>
-                        <div class="info-row"><span class="info-label">Ответственный:</span> ${task.assignee}</div>
-                        <button class="btn-base btn-complete" onclick="confirmTask('${task.project_id}', '${task.row_number}', '${task.task_name.replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
+                        <button class="btn-base btn-project" onclick="clickProject('${escapeHtml(task.project_name)}', '${task.project_id}')">${escapeHtml(task.project_name)}</button>
+                        <div class="task-title">${escapeHtml(task.task_name)}</div>
+                        <div class="info-row"><span class="info-label">Описание:</span> ${escapeHtml(task.description)}</div>
+                        <div class="info-row"><span class="info-label">Ответственный:</span> ${escapeHtml(task.assignee)}</div>
+                        <button class="btn-base btn-complete" onclick="confirmTask('${task.project_id}', '${task.row_number}', '${escapeHtml(task.task_name).replace(/'/g, "\\'")}')">✅ ЗАВЕРШИТЬ</button>
                     `;
                     container.appendChild(card);
                 });
@@ -126,6 +282,7 @@
             }
         }
 
+        // Функции для взаимодействия с ботом
         function clickProject(name, gid) {
             if (!tg) return;
             tg.sendData(JSON.stringify({
@@ -147,7 +304,6 @@
                 ]
             }, function(buttonId) {
                 if (buttonId === 'yes') {
-                    // Передаем точный GID листа и номер строки для Python-обработчика
                     tg.sendData(JSON.stringify({
                         action: "complete_task",
                         project_id: projectGid, 
@@ -158,7 +314,9 @@
             });
         }
 
+        // Запускаем всё
         loadTasks();
+        startAutoRefresh();
     </script>
 </body>
 </html>
